@@ -4,9 +4,11 @@
 // - Runs on Cloud Run using Application Default Credentials (ADC): the service
 //   account attached to the service supplies credentials automatically, so we
 //   never reference a key file.
-// - The bucket uses uniform bucket-level access with public read granted at the
-//   bucket level. We therefore do NOT call makePublic() (that errors under
-//   uniform access) — we just construct and return the public URL.
+// - The org enforces `storage.publicAccessPrevention`, so objects CANNOT be made
+//   public. We therefore keep the bucket private and serve photos through an
+//   authenticated app route (GET /api/photo/<objectName>) that streams the bytes
+//   using the same service-account credentials. uploadProfilePhoto returns that
+//   app-relative URL, which is stored on the User and used directly in <img src>.
 import { Storage } from "@google-cloud/storage";
 import { randomUUID } from "node:crypto";
 
@@ -31,6 +33,7 @@ function extFor(contentType: string, originalName?: string): string {
   return "jpg";
 }
 
+// Upload bytes to the private bucket and return the app URL that serves them.
 export async function uploadProfilePhoto(
   bytes: Buffer,
   contentType: string,
@@ -45,5 +48,22 @@ export async function uploadProfilePhoto(
     metadata: { cacheControl: "public, max-age=31536000" },
   });
 
-  return `https://storage.googleapis.com/${BUCKET}/${name}`;
+  return `/api/photo/${name}`;
+}
+
+// Download an object's bytes + content type for the serve route. Returns null
+// if the object doesn't exist.
+export async function getPhoto(
+  objectName: string,
+): Promise<{ bytes: Buffer; contentType: string } | null> {
+  const file = storage.bucket(BUCKET).file(objectName);
+  const [exists] = await file.exists();
+  if (!exists) return null;
+
+  const [metadata] = await file.getMetadata();
+  const [bytes] = await file.download();
+  return {
+    bytes,
+    contentType: (metadata.contentType as string) ?? "application/octet-stream",
+  };
 }
