@@ -1,8 +1,93 @@
 # Review prep — TheFacebook (2004) replica
 
-Answers and talking points for the post-build review, section by section.
+Answers and talking points for the post-build review. Part A is the section-by-section narrative; **Part B answers the specific questionnaire (Q1–Q20)**.
 
 ---
+
+# Part B — Questionnaire (Q1–Q20)
+
+## 1. Live Demo & Scope Management
+
+**Q1 — Walk through the live app; what's fully functional?**
+URL: https://omkar-app-cxkix43qtq-uc.a.run.app (IAP → `@smlcrm.com` login, then a demo account from `user-details.md`). Fully working: `.edu` register/login with server-side sessions; the member **directory** with name/network **search**; **profiles** with the full 2004 field set and a **photo upload** (stored private, served through a proxy); **friend requests** with accept/reject; **The Wall** (post + list). The seeded Harvard users, their friendships, and a pending Cameron→Mark request are all live.
+
+**Q2 — How did you scope the MVP from an underspecified prompt?**
+I anchored on a hard date: **TheFacebook as of February 2004**. That turned "what to build" into a factual question. In-scope = what existed then (directory, profiles, friends, the Wall, `.edu` gate). Out = anything that postdates it (News Feed 2006, Likes/comments, Groups, Messenger). Authenticity *is* the scoping discipline — every cut has a defensible reason instead of feeling like a missing feature.
+
+**Q3 — A feature you downscoped mid-build to hit the deadline, and the trade-off.**
+Two real ones. (1) **Photo delivery** was planned as public GCS URLs; when the org policy blocked public objects I downscoped from "CDN-style public object" to a **proxy route that streams the bytes through the app**. Slower, but keeps the feature and respects the constraint — the right call under time pressure. (2) I deliberately spent the back half of the budget on the **deploy path** (private-IP DB + VPC + IAP) rather than UI polish, so what got cut was cosmetic/secondary: directory pagination, richer profile interactivity, and any client-side JS beyond forms. Trade-off logic: a working *deployed* app beats a prettier local one, since deployment is explicitly graded.
+
+**Q4 — What's broken/incomplete? Be upfront.**
+- Not truly public — org policy forbids `allUsers`, so it's behind **IAP** (smlcrm.com only). Correct given constraints, but a reviewer must use an smlcrm.com identity.
+- Photos are streamed through `/api/photo` on every render (browser-cached via `Cache-Control`, but **no CDN**) — fine for demo scale, not for real traffic.
+- **No pagination** — directory caps at 200, walls at 100.
+- **`SESSION_SECRET` is provisioned but unused**: sessions are high-entropy random tokens looked up in the DB (a bearer-token model), not signed cookies. Secure, but I'd either wire it into cookie signing or remove it to avoid confusion.
+- No rate-limiting on login/register, and profile fields like `birthday` are free-text strings, not typed dates.
+
+## 2. System Design & Architecture
+
+**Q5 — Data model, why Cloud SQL over Firestore, and data integrity.**
+Four tables: `User`, `Session`, `Friendship` (a join row with `requesterId`/`addresseeId` + a `PENDING|ACCEPTED` enum), `WallPost` (two FKs to `User`: author and wall-owner). The data is inherently **relational** — symmetric friendships, join queries for "friends of X," directory filters — which is exactly what a SQL engine + foreign keys do well; Firestore would force denormalization and make the both-directions friendship query and search awkward. **Integrity:** FK constraints with `onDelete: Cascade`, `@@unique([requesterId, addresseeId])` to stop duplicate friend rows, a unique `email`, and the status enum. Prisma migrations are the schema source of truth.
+
+**Q6 — Backend API design (Server Actions / Route Handlers).**
+Mutations are **Server Actions** in `lib/actions.ts` (`register`, `login`, `logout`, `updateProfile`, `sendRequest`, `respondRequest`, `postToWall`), invoked directly from `<form action={...}>` — no hand-rolled REST layer, and progressive-enhancement friendly. I used **Route Handlers only where the Web Request/Response API is the right tool**: `POST /api/upload` (multipart in) and `GET /api/photo/[...path]` (bytes out). Reads are plain async calls in Server Components via `lib/queries.ts`. After each mutation I `revalidatePath` the affected route.
+
+**Q7 — Authentication across the front/back boundary.**
+`bcryptjs` hashes the password. On login I create a `Session` row whose **id is a 32-byte random token**, and set that token in an **httpOnly, Secure, SameSite=Lax** cookie. `getCurrentUser()` (in `lib/auth.ts`) reads the cookie → looks up the session → checks `expiresAt` (lazily deleting expired ones) → returns the user. Sessions are **server-side**, so logout and expiry are authoritative (no stateless-JWT revocation problem). Because Server Actions are just POST endpoints, **every action and every protected page re-checks `getCurrentUser()`** — authorization never lives only in the UI.
+
+**Q8 — How does Next securely reach the Cloud DB in the sandbox?**
+Prisma 7 connects through the **node-postgres driver adapter** (`@prisma/adapter-pg`). The `DATABASE_URL` (a **private-IP** connection string) lives in **Secret Manager**, mounted as an env var; the runtime service account has `secretAccessor`. Cloud SQL has **no public IP** (org policy), so Cloud Run reaches it via **Direct VPC egress** (`--network=default --vpc-egress=private-ranges-only`) into the `default` VPC, which is peered to Cloud SQL through Private Service Access. Nothing about the DB is exposed to the internet.
+
+## 3. Claude Code Workflow & Proficiency
+
+**Q9 — CLAUDE.md structure and the standards you gave the agent.**
+`CLAUDE.md` imports `AGENTS.md` (which mandates **reading the in-repo Next.js 16 docs before writing code**, because this version has breaking changes vs training data) and then pins the **strict, non-negotiable deployment architecture**: target project, private-IP + VPC egress, private-bucket-via-proxy, IAP-not-allUsers, plus an operational command reference and "deploy invariants." Crucially these were promoted into `CLAUDE.md` **after** I discovered each org constraint the hard way — so the rules persist and future sessions don't repeat the mistakes.
+
+**Q10 — How plan.md evolved; how you blocked the work.**
+`plan.md` started as a phased plan with a time budget: foundation → early deploy de-risk → shared contracts → parallel UI sprint → deploy → seed/polish. It **evolved on contact with reality**: Prisma 7's breaking changes deleted the planned `binaryTargets` step, and the org policies rewrote the whole deploy block (public socket → private IP + VPC + IAP; public bucket → proxy). The decomposition that let Claude execute cleanly: **write shared contracts first on the main thread** (schema, `lib/db`, `lib/auth`, and the `lib/actions`/`lib/queries` signatures), then fan out independent UI on top of them.
+
+**Q11 — Subagents: parallelization, context, conflict prevention.**
+Yes — after committing the shared foundation, I launched **three subagents in parallel on non-overlapping files**: Agent A = Profile UI (`profile/[id]`, `profile/edit`), Agent B = Social UI (`friends`, `directory`), Agent C = upload route + `lib/storage`. Conflict prevention was **structural, not hopeful**: each agent was given the exact contract signatures to import, the list of CSS classes to use, the Next 16 conventions, and an explicit ban on editing any shared file — so two agents literally never touched the same file. Context was managed by handing each a tight interface rather than the whole codebase. Each landed as its **own commit** so the history shows the parallel sprint, and the main thread integrated + `tsc`-checked each.
+
+**Q12 — Debugging strategy when Claude produced broken code / terminal errors.**
+Read the *actual* error, reproduce it minimally, fix the root cause — don't re-prompt blindly. Examples from this build: Prisma's `P1012` ("`url` no longer supported") sent me to the v7 config model; a build failure was reproduced locally by running `prisma generate` **with `.env` moved aside**, which proved the throwing `env()` helper was the cause; the GCP `400/412/FAILED_PRECONDITION` errors were read literally ("violates constraints/sql.restrictPublicIp", "public access prevention is enforced", "do not belong to a permitted customer") and each triggered an architecture pivot rather than a retry.
+
+**Q13 — A time you modified or rejected Claude's output.**
+The clearest: a subagent typed a field list as `keyof Awaited<ReturnType<typeof getProfile>>`, which collapses to `never` (because `getProfile` returns `User | null` and `keyof null` is `never`) — `tsc` caught it at integration and I rewrote it to `keyof User`. I also **rejected the model's Prisma ≤6 assumptions** (URL in `schema.prisma`, `binaryTargets` for Cloud Run) after reading the v7 docs, and **overrode Agent C's original design** of returning a public `storage.googleapis.com` URL, replacing it with the private proxy once the org policy was known.
+
+## 4. Code Deep Dive
+
+**Q14 — Explain one of the most complex functions line-by-line.**
+`getRelationState(viewerId, profileId)` in `lib/queries.ts` — it drives the profile's friend button and has to treat friendship as **symmetric**:
+1. `if (viewerId === profileId) return "self"` — you don't friend yourself.
+2. `findFirst` with an `OR` of both orderings (`requester=viewer,addressee=profile` **or** the reverse) — because either party could have initiated.
+3. `if (!fr) return "none"` — no row → offer "Add to Friends".
+4. `if (fr.status === "ACCEPTED") return "friends"`.
+5. Otherwise it's `PENDING`, so `return fr.requesterId === viewerId ? "outgoing" : "incoming"` — "outgoing" shows "request pending"; "incoming" points them to the friends page to accept. That single value lets the view render the correct control without any other logic. (Runner-up for complexity: the **deploy path** — Cloud Run → Direct VPC egress → PSA-peered private Cloud SQL, with migrations run from a baked-engine Job because the DB is unreachable off-VPC and there's no public egress to download the engine at runtime.)
+
+**Q15 — % Claude-generated vs. hand-refined for a file, and why you intervened.**
+`app/profile/[id]/page.tsx`: ~90% subagent-generated against my contract; my intervention was the `keyof User` type fix (a real compile bug the agent couldn't see without the whole type graph). Inverse example: `lib/db.ts`, `lib/auth.ts`, and the `lib/storage.ts` proxy are ~mostly **hand-written/heavily-directed**, because they encode security- and infra-critical decisions (Prisma 7 adapter wiring, session/cookie flags, private-bucket streaming) where I wanted to own every line. All **infrastructure** (VPC, IAP, Jobs, secrets) was main-thread, not generated.
+
+**Q16 — Runtime error handling / edge cases so it doesn't crash in prod.**
+`POST /api/upload`: 401 if unauthenticated, rejects non-images and >5MB, and wraps the GCS call in try/catch → 500 with a logged error (never an unhandled throw). `GET /api/photo/[...path]`: a `profile-photos/` **prefix guard** (can't be used to read arbitrary objects) and a 404 when the object doesn't exist. `respondRequest`: only the **addressee** of a still-`PENDING` request can act — anything else is a silent no-op, so replaying a stale form can't corrupt state. `getCurrentUser`: missing/expired sessions return `null` (and expired rows are deleted) rather than throwing.
+
+## 5. Production, Security & Growth
+
+**Q17 — Public repo: how did you keep secrets out, and where do they live?**
+`.gitignore` excludes `.env*` (with a `!.env.example` exception) and service-account-key patterns; I **verified `git status` didn't include `.env` before the very first commit**. There are **no key files at all** — everything uses **Application Default Credentials** (the Cloud Run service account), so there's nothing to leak. Real secrets (`DATABASE_URL`, `SESSION_SECRET`) live in **Secret Manager** and are mounted as env vars at deploy time; the runtime SA has `secretAccessor`.
+
+**Q18 — Scaling on a traffic spike; first bottlenecks.**
+Cloud Run scales the stateless web container horizontally on its own. The **first bottleneck is Cloud SQL connections** — `db-f1-micro` supports only ~25–50, and N instances × a pool each exhausts that fast; the memoized single `PrismaClient` per instance helps, but the fix is a **connection pooler** (PgBouncer / the Cloud SQL connector's pooling) and then bumping the instance tier. The **second is the photo proxy** — every image render is an authenticated GCS download through the app; I'd move that to signed URLs or a CDN. Cold starts (scale-to-zero) are the third; `--min-instances=1` removes them when worth the cost.
+
+**Q19 — Production-grade migrations, testing, CI/CD logging with Cloud Build.**
+**Migrations** already run as a dedicated **Cloud Run Job** (`omkar-migrate`, roll-forward, reviewed under `prisma/migrations`) — decoupled from web startup so instances don't race. **CI/CD:** a `cloudbuild.yaml` triggered on push to `main` → build image → push to Artifact Registry → **run the migrate Job** → deploy the service, gated on `tsc`/lint/tests; build + step logs land in Cloud Build/Cloud Logging. **Testing:** unit tests for pure logic (`isEduEmail`, `networkFromEmail`, `getRelationState`), integration tests for Server Actions against an ephemeral Postgres (the same local-Docker pattern), and a Playwright smoke test of register→friend→wall. **Observability:** Cloud Logging + Error Reporting, an uptime check on `/`, and alerts on 5xx rate and DB connection errors.
+
+**Q20 — With another 2 hours, immediate next steps.**
+In priority order: (1) **CDN/signed-URL photos** to kill the proxy bottleneck; (2) a **Cloud Build CI/CD pipeline** + the test suite above; (3) **pagination** on directory/wall; (4) **rate-limiting** on login/register and basic abuse protection; (5) decide `SESSION_SECRET` — either sign the cookie with it or remove it; (6) typed profile fields (real date for birthday, enum for relationship status); (7) `--min-instances=1` + a small monitoring dashboard. None are architectural rewrites — the foundation holds.
+
+---
+
+# Part A — Narrative notes
 
 ## 1. Live Demo (10 min)
 
