@@ -1,0 +1,253 @@
+/* TheFacebook (2004) — hand-written period CSS.
+   Palette + type reproduce the early-2004 look: dark blue header (#3B5998),
+   small Lucida/Verdana text, thin gray borders, boxy tables, no rounded corners. */
+
+:root {
+  --tf-blue: #3b5998;
+  --tf-blue-dark: #2f477a;
+  --tf-lightblue: #6d84b4;
+  --tf-paleblue: #d8dfea;
+  --tf-palebg: #eff2f7;
+  --tf-border: #b8b8b8;
+  --tf-text: #333333;
+  --tf-link: #3b5998;
+  --tf-red: #990000;
+  --tf-page-bg: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Lucida Grande", Tahoma, Verdana, Arial, sans-serif;
+  font-size: 11px;
+  color: var(--tf-text);
+  background: var(--tf-page-bg);
+  line-height: 1.4;
+}
+
+a {
+  color: var(--tf-link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* ---- Header bar ---- */
+.tf-header {
+  background: var(--tf-blue);
+  border-bottom: 1px solid var(--tf-blue-dark);
+  color: #fff;
+  padding: 0;
+}
+.tf-header-inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 6px 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.tf-wordmark {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+.tf-wordmark:hover {
+  text-decoration: none;
+}
+.tf-nav {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+}
+.tf-nav a,
+.tf-nav span {
+  color: #fff;
+  font-size: 11px;
+}
+.tf-nav form {
+  display: inline;
+}
+.tf-nav button {
+  background: none;
+  border: none;
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: none;
+}
+.tf-nav button:hover {
+  text-decoration: underline;
+}
+
+/* ---- Layout container ---- */
+.tf-container {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 12px 10px 40px;
+}
+
+.tf-subbar {
+  background: var(--tf-paleblue);
+  border: 1px solid var(--tf-border);
+  padding: 4px 8px;
+  font-weight: bold;
+  color: var(--tf-blue);
+  margin-bottom: 10px;
+}
+
+/* ---- Boxes / panels ---- */
+.tf-box {
+  border: 1px solid var(--tf-border);
+  margin-bottom: 12px;
+  background: #fff;
+}
+.tf-box-title {
+  background: var(--tf-blue);
+  color: #fff;
+  font-weight: bold;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+.tf-box-body {
+  padding: 8px;
+}
+
+/* ---- Forms ---- */
+label {
+  display: block;
+  font-weight: bold;
+  margin: 6px 0 2px;
+}
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="file"],
+textarea,
+select {
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+  font-size: 11px;
+  border: 1px solid #9c9c9c;
+  padding: 2px 3px;
+  background: #fff;
+}
+input[type="text"],
+input[type="password"],
+input[type="email"],
+textarea,
+select {
+  width: 260px;
+}
+textarea {
+  height: 60px;
+}
+button,
+input[type="submit"] {
+  font-family: Tahoma, Verdana, Arial, sans-serif;
+  font-size: 11px;
+  background: var(--tf-palebg);
+  border: 1px solid #7f7f7f;
+  padding: 2px 10px;
+  cursor: pointer;
+}
+button:hover,
+input[type="submit"]:hover {
+  background: var(--tf-paleblue);
+}
+
+/* ---- Profile info table ---- */
+.tf-info {
+  width: 100%;
+  border-collapse: collapse;
+}
+.tf-info th {
+  text-align: right;
+  vertical-align: top;
+  color: #666;
+  font-weight: normal;
+  padding: 2px 8px 2px 0;
+  width: 120px;
+  white-space: nowrap;
+}
+.tf-info td {
+  text-align: left;
+  vertical-align: top;
+  padding: 2px 0;
+}
+
+/* ---- Photo ---- */
+.tf-photo {
+  border: 1px solid var(--tf-border);
+  padding: 3px;
+  background: #fff;
+  display: block;
+}
+
+/* ---- Directory / member list ---- */
+.tf-member {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  border-bottom: 1px solid #e5e5e5;
+  padding: 8px 0;
+}
+.tf-member-name {
+  font-weight: bold;
+  font-size: 12px;
+}
+
+/* ---- The Wall ---- */
+.tf-wall-post {
+  border-bottom: 1px solid #e5e5e5;
+  padding: 6px 0;
+}
+.tf-wall-meta {
+  color: #999;
+  font-size: 10px;
+}
+
+/* ---- Utility ---- */
+.tf-muted {
+  color: #999;
+}
+.tf-error {
+  color: var(--tf-red);
+  font-weight: bold;
+  margin: 6px 0;
+}
+.tf-hr {
+  border: none;
+  border-top: 1px solid var(--tf-border);
+  margin: 10px 0;
+}
+.tf-actions {
+  margin-top: 8px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.tf-small {
+  font-size: 10px;
+}
+h1 {
+  font-size: 16px;
+  color: var(--tf-blue);
+  margin: 0 0 8px;
+}
+h2 {
+  font-size: 13px;
+  color: var(--tf-blue);
+  margin: 0 0 6px;
+}

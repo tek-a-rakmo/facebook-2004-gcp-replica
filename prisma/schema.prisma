@@ -1,0 +1,83 @@
+// TheFacebook (2004) data model.
+// Prisma 7: the client uses the query compiler + a driver adapter (node-postgres),
+// so there is NO Rust query-engine binary — the old `binaryTargets` Cloud Run gotcha
+// no longer applies. The connection URL lives in prisma.config.ts, not here.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  network      String // derived from the .edu email domain, e.g. "Harvard"
+  photoUrl     String?
+  createdAt    DateTime @default(now())
+
+  // Profile fields (period-accurate to the 2004 profile form)
+  concentration      String?
+  hometown           String?
+  highSchool         String?
+  residence          String?
+  birthday           String?
+  relationshipStatus String?
+  interestedIn       String?
+  lookingFor         String?
+  aboutMe            String?
+  favoriteBooks      String?
+  favoriteMusic      String?
+  favoriteMovies     String?
+  courses            String?
+
+  sessions          Session[]
+  sentRequests      Friendship[] @relation("Requester")
+  receivedRequests  Friendship[] @relation("Addressee")
+  authoredPosts     WallPost[]   @relation("Author")
+  wallPosts         WallPost[]   @relation("Wall")
+}
+
+model Session {
+  id        String   @id // random token, also the cookie value
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+}
+
+model Friendship {
+  id          String           @id @default(cuid())
+  requesterId String
+  requester   User             @relation("Requester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addresseeId String
+  addressee   User             @relation("Addressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+
+  @@unique([requesterId, addresseeId])
+  @@index([addresseeId])
+}
+
+model WallPost {
+  id        String   @id @default(cuid())
+  authorId  String
+  author    User     @relation("Author", fields: [authorId], references: [id], onDelete: Cascade)
+  profileId String // whose wall this post lives on
+  profile   User     @relation("Wall", fields: [profileId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([profileId])
+}
