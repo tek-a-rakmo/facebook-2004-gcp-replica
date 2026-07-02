@@ -2,7 +2,8 @@
 
 A faithful rebuild of **TheFacebook as it existed in February 2004**, deployed on Google Cloud. Built as a timed interview challenge — see [`plan.md`](./plan.md) for the full plan, scope reasoning, and time budget.
 
-> **Live demo:** _(added after deploy)_
+> **Live demo:** https://omkar-app-cxkix43qtq-uc.a.run.app
+> **Access:** the org blocks fully-public services, so the app is behind **Identity-Aware Proxy** — open the URL and sign in with an **`@smlcrm.com` Google account**. Then log into the app itself with a demo account from [`user-details.md`](./user-details.md) (password `harvard2004`).
 
 ## What it does
 

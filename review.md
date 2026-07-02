@@ -6,7 +6,7 @@ Answers and talking points for the post-build review, section by section.
 
 ## 1. Live Demo (10 min)
 
-**Public URL:** _(Cloud Run HTTPS URL — added after deploy)_
+**URL:** https://omkar-app-cxkix43qtq-uc.a.run.app — the org policy blocks fully-public (`allUsers`) services, so it's behind **Identity-Aware Proxy**: sign in with an `@smlcrm.com` Google account, then log into the app with a demo account (`user-details.md`, password `harvard2004`).
 
 **Happy-path walkthrough:**
 1. Land on `/` → the retro login page. Register a new account with an `@harvard.edu` email (try a non-`.edu` first to show the validation rejecting it).
